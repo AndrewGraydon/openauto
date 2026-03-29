@@ -367,11 +367,25 @@ void GSTVideoOutput::onStartPlayback()
 
     if (videoContainer_ == nullptr)
     {
+        // Hide all other top-level windows (e.g. MainWindow) so our VideoWidget
+        // is the only visible window. Under EGLFS, WindowStaysOnTopHint does not
+        // guarantee ordering between two windows that both have the hint, so we
+        // must hide the others explicitly.
+        hiddenWidgets_.clear();
+        for (QWidget* w : QApplication::topLevelWidgets())
+        {
+            if (w != videoWidget_ && w->isVisible())
+            {
+                w->hide();
+                hiddenWidgets_.append(w);
+            }
+        }
+
         QScreen* screen = QApplication::primaryScreen();
         QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 800, 480);
         OPENAUTO_LOG(info) << "[GSTVideoOutput] Fullscreen mode: "
                            << screenGeom.width() << "x" << screenGeom.height();
-        videoWidget_->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);
+        videoWidget_->setWindowFlags(Qt::FramelessWindowHint);
         videoWidget_->setGeometry(screenGeom);
         videoWidget_->show();
         videoWidget_->raise();
@@ -412,6 +426,11 @@ void GSTVideoOutput::onStopPlayback()
     OPENAUTO_LOG(info) << "[GSTVideoOutput] stop.";
     gst_element_set_state(vidPipeline_, GST_STATE_PAUSED);
     videoWidget_->hide();
+
+    // Restore windows that were hidden when projection started
+    for (QWidget* w : hiddenWidgets_)
+        w->show();
+    hiddenWidgets_.clear();
 }
 
 void GSTVideoOutput::resize()

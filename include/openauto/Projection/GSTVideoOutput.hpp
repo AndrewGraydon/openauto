@@ -130,6 +130,7 @@ private:
     std::mutex latestFrameMutex_;
     QTimer* frameTimer_;  // fires at ~30fps on the main thread to paint latestFrame_
 
+    QList<QWidget*> hiddenWidgets_;  // top-level widgets hidden when projection starts
     VideoWidget* videoWidget_;
     GstElement* vidPipeline_;
     GstVideoFilter* vidCrop_;
