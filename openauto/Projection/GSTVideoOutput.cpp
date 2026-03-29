@@ -80,9 +80,10 @@ GSTVideoOutput::GSTVideoOutput(configuration::IConfiguration::Pointer configurat
     // Create our plain Qt rendering widget
     videoWidget_ = new VideoWidget(videoContainer_);
 
-    // Connect the newFrame signal so frame delivery (from the GStreamer thread)
-    // triggers a repaint on the Qt main thread safely.
-    connect(this, &GSTVideoOutput::newFrame, videoWidget_, &VideoWidget::updateFrame, Qt::QueuedConnection);
+    // Route newFrame through onFrameReady (main thread) which clears framePending_
+    // before painting. This ensures at most one frame update is ever queued,
+    // so touch events are not delayed behind a backlog of video frames.
+    connect(this, &GSTVideoOutput::newFrame, this, &GSTVideoOutput::onFrameReady, Qt::QueuedConnection);
 
     // ----- Build the GStreamer pipeline -----
     // Pipeline: appsrc ! queue ! h264parse ! capssetter ! <decoder> ! videocrop ! videoconvert ! video/x-raw,format=RGB ! appsink
@@ -204,8 +205,20 @@ GstFlowReturn GSTVideoOutput::onNewSample(GstAppSink* sink, gpointer userData)
     auto* self = static_cast<GSTVideoOutput*>(userData);
 
     GstSample* sample = gst_app_sink_pull_sample(sink);
+
+    // If a frame is already queued on the Qt main thread, drop this one.
+    // This keeps the Qt event queue shallow so touch events are not delayed
+    // by a backlog of pending video frame updates.
+    if (self->framePending_.exchange(true))
+    {
+        gst_sample_unref(sample);
+        return GST_FLOW_OK;
+    }
     if (!sample)
+    {
+        self->framePending_.store(false);
         return GST_FLOW_ERROR;
+    }
 
     GstBuffer* buffer = gst_sample_get_buffer(sample);
     GstCaps* caps = gst_sample_get_caps(sample);
@@ -216,16 +229,19 @@ GstFlowReturn GSTVideoOutput::onNewSample(GstAppSink* sink, gpointer userData)
         GstMapInfo map;
         if (gst_buffer_map(buffer, &map, GST_MAP_READ))
         {
-            // Wrap the decoded RGB data in a QImage without copying.
-            // QImage::Format_RGB888 matches videoconvert output "video/x-raw,format=RGB".
             QImage frame(map.data, vinfo.width, vinfo.height,
                          vinfo.stride[0], QImage::Format_RGB888);
-
-            // Emit a deep copy so the buffer can be unmapped before Qt uses it.
             emit self->newFrame(frame.copy());
-
             gst_buffer_unmap(buffer, &map);
         }
+        else
+        {
+            self->framePending_.store(false);
+        }
+    }
+    else
+    {
+        self->framePending_.store(false);
     }
 
     gst_sample_unref(sample);
@@ -378,6 +394,14 @@ void GSTVideoOutput::onStartPlayback()
 void GSTVideoOutput::stop()
 {
     emit stopPlayback();
+}
+
+void GSTVideoOutput::onFrameReady(const QImage& frame)
+{
+    // Clear the pending flag first so the GStreamer thread can queue the
+    // next frame immediately, while this frame is being painted.
+    framePending_.store(false);
+    videoWidget_->updateFrame(frame);
 }
 
 void GSTVideoOutput::onStopPlayback()

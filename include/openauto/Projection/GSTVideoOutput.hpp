@@ -19,6 +19,7 @@
 #ifdef USE_GST
 #pragma once
 
+#include <atomic>
 #include <mutex>
 #include <functional>
 #include <boost/noncopyable.hpp>
@@ -115,6 +116,7 @@ signals:
 protected slots:
     void onStartPlayback();
     void onStopPlayback();
+    void onFrameReady(const QImage& frame);  // clears framePending_ then paints
 
 public slots:
     void dumpDot();
@@ -125,6 +127,7 @@ private:
     H264_Decoder findPreferredVideoDecoder();
 
     bool firstHeaderParsed = false;
+    std::atomic<bool> framePending_{false};  // true while a newFrame signal is in the Qt event queue
 
     VideoWidget* videoWidget_;
     GstElement* vidPipeline_;
