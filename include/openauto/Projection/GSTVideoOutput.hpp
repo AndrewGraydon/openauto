@@ -19,7 +19,6 @@
 #ifdef USE_GST
 #pragma once
 
-#include <atomic>
 #include <mutex>
 #include <functional>
 #include <boost/noncopyable.hpp>
@@ -111,12 +110,10 @@ public:
 signals:
     void startPlayback();
     void stopPlayback();
-    void newFrame(const QImage& frame);
 
 protected slots:
     void onStartPlayback();
     void onStopPlayback();
-    void onFrameReady(const QImage& frame);  // clears framePending_ then paints
 
 public slots:
     void dumpDot();
@@ -127,7 +124,11 @@ private:
     H264_Decoder findPreferredVideoDecoder();
 
     bool firstHeaderParsed = false;
-    std::atomic<bool> framePending_{false};  // true while a newFrame signal is in the Qt event queue
+
+    // Latest decoded frame, written by GStreamer thread, read by frameTimer_.
+    QImage latestFrame_;
+    std::mutex latestFrameMutex_;
+    QTimer* frameTimer_;  // fires at ~30fps on the main thread to paint latestFrame_
 
     VideoWidget* videoWidget_;
     GstElement* vidPipeline_;

@@ -80,10 +80,23 @@ GSTVideoOutput::GSTVideoOutput(configuration::IConfiguration::Pointer configurat
     // Create our plain Qt rendering widget
     videoWidget_ = new VideoWidget(videoContainer_);
 
-    // Route newFrame through onFrameReady (main thread) which clears framePending_
-    // before painting. This ensures at most one frame update is ever queued,
-    // so touch events are not delayed behind a backlog of video frames.
-    connect(this, &GSTVideoOutput::newFrame, this, &GSTVideoOutput::onFrameReady, Qt::QueuedConnection);
+    // 30fps paint timer — fires on the main thread and paints the latest decoded
+    // frame. Driving paint from a timer (not a queued signal per decoded frame)
+    // guarantees the Qt event queue stays shallow, so touch events are never
+    // delayed behind a backlog of pending video frame updates.
+    frameTimer_ = new QTimer(this);
+    frameTimer_->setInterval(33);  // ~30fps
+    frameTimer_->setSingleShot(false);
+    connect(frameTimer_, &QTimer::timeout, this, [this]() {
+        QImage frame;
+        {
+            std::lock_guard<std::mutex> lock(latestFrameMutex_);
+            if (latestFrame_.isNull())
+                return;
+            frame = latestFrame_;
+        }
+        videoWidget_->updateFrame(frame);
+    });
 
     // ----- Build the GStreamer pipeline -----
     // Pipeline: appsrc ! queue ! h264parse ! capssetter ! <decoder> ! videocrop ! videoconvert ! video/x-raw,format=RGB ! appsink
@@ -205,20 +218,8 @@ GstFlowReturn GSTVideoOutput::onNewSample(GstAppSink* sink, gpointer userData)
     auto* self = static_cast<GSTVideoOutput*>(userData);
 
     GstSample* sample = gst_app_sink_pull_sample(sink);
-
-    // If a frame is already queued on the Qt main thread, drop this one.
-    // This keeps the Qt event queue shallow so touch events are not delayed
-    // by a backlog of pending video frame updates.
-    if (self->framePending_.exchange(true))
-    {
-        gst_sample_unref(sample);
-        return GST_FLOW_OK;
-    }
     if (!sample)
-    {
-        self->framePending_.store(false);
         return GST_FLOW_ERROR;
-    }
 
     GstBuffer* buffer = gst_sample_get_buffer(sample);
     GstCaps* caps = gst_sample_get_caps(sample);
@@ -229,19 +230,16 @@ GstFlowReturn GSTVideoOutput::onNewSample(GstAppSink* sink, gpointer userData)
         GstMapInfo map;
         if (gst_buffer_map(buffer, &map, GST_MAP_READ))
         {
+            // Store a deep copy of the decoded frame for the paint timer to use.
+            // The timer reads latestFrame_ on the main thread at ~30fps.
             QImage frame(map.data, vinfo.width, vinfo.height,
                          vinfo.stride[0], QImage::Format_RGB888);
-            emit self->newFrame(frame.copy());
+            {
+                std::lock_guard<std::mutex> lock(self->latestFrameMutex_);
+                self->latestFrame_ = frame.copy();
+            }
             gst_buffer_unmap(buffer, &map);
         }
-        else
-        {
-            self->framePending_.store(false);
-        }
-    }
-    else
-    {
-        self->framePending_.store(false);
     }
 
     gst_sample_unref(sample);
@@ -387,6 +385,8 @@ void GSTVideoOutput::onStartPlayback()
         videoWidget_->show();
     }
 
+    frameTimer_->start();
+
     // Dump pipeline graph after 10s for debugging
     QTimer::singleShot(10000, this, SLOT(dumpDot()));
 }
@@ -396,20 +396,18 @@ void GSTVideoOutput::stop()
     emit stopPlayback();
 }
 
-void GSTVideoOutput::onFrameReady(const QImage& frame)
-{
-    // Clear the pending flag first so the GStreamer thread can queue the
-    // next frame immediately, while this frame is being painted.
-    framePending_.store(false);
-    videoWidget_->updateFrame(frame);
-}
-
 void GSTVideoOutput::onStopPlayback()
 {
     firstHeaderParsed = false;
 
     if (activeCallback_)
         activeCallback_(false);
+
+    frameTimer_->stop();
+    {
+        std::lock_guard<std::mutex> lock(latestFrameMutex_);
+        latestFrame_ = QImage();
+    }
 
     OPENAUTO_LOG(info) << "[GSTVideoOutput] stop.";
     gst_element_set_state(vidPipeline_, GST_STATE_PAUSED);
