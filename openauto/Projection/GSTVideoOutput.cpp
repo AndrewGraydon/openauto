@@ -106,12 +106,17 @@ GSTVideoOutput::GSTVideoOutput(configuration::IConfiguration::Pointer configurat
 
     std::string pipelineStr =
         "appsrc name=mysrc is-live=true block=false max-latency=100 do-timestamp=true stream-type=stream "
-        "! queue "
+        "! queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 "
         "! h264parse "
         "! capssetter caps=\"video/x-h264,colorimetry=bt709\" "
         "! ";
     pipelineStr += ToPipeline(decoder);
-    pipelineStr += " ! videocrop top=0 bottom=0 name=videocropper "
+    // Queue after decoder drops old decoded frames (raw video) so the appsink
+    // always gets the latest frame. Dropping decoded frames is safe — no
+    // bitstream integrity risk. leaky=downstream drops the oldest (head)
+    // buffer when full, keeping the most recently decoded frame.
+    pipelineStr += " ! queue max-size-buffers=1 max-size-bytes=0 max-size-time=0 leaky=downstream "
+                   "! videocrop top=0 bottom=0 name=videocropper "
                    "! videoconvert "
                    "! video/x-raw,format=RGB "
                    "! appsink name=mysink emit-signals=true sync=false max-buffers=2 drop=true";
