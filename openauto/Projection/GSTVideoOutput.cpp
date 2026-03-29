@@ -385,7 +385,7 @@ void GSTVideoOutput::onStartPlayback()
         QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 800, 480);
         OPENAUTO_LOG(info) << "[GSTVideoOutput] Fullscreen mode: "
                            << screenGeom.width() << "x" << screenGeom.height();
-        videoWidget_->setWindowFlags(Qt::FramelessWindowHint);
+        videoWidget_->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);
         videoWidget_->setGeometry(screenGeom);
         videoWidget_->show();
         videoWidget_->raise();
