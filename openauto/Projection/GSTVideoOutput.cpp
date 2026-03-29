@@ -40,6 +40,7 @@ VideoWidget::VideoWidget(QWidget* parent)
 {
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAttribute(Qt::WA_NoSystemBackground);
+    setAttribute(Qt::WA_AcceptTouchEvents);
 }
 
 void VideoWidget::updateFrame(const QImage& frame)
@@ -352,19 +353,23 @@ void GSTVideoOutput::onStartPlayback()
 
     if (videoContainer_ == nullptr)
     {
-        OPENAUTO_LOG(info) << "[GSTVideoOutput] Fullscreen mode (no video container)";
-        videoWidget_->setFocus();
+        QScreen* screen = QApplication::primaryScreen();
+        QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 800, 480);
+        OPENAUTO_LOG(info) << "[GSTVideoOutput] Fullscreen mode: "
+                           << screenGeom.width() << "x" << screenGeom.height();
         videoWidget_->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);
-        videoWidget_->showFullScreen();
+        videoWidget_->setGeometry(screenGeom);
+        videoWidget_->show();
+        videoWidget_->raise();
+        videoWidget_->setFocus();
     }
     else
     {
         OPENAUTO_LOG(info) << "[GSTVideoOutput] Resizing to container "
                            << videoContainer_->width() << "x" << videoContainer_->height();
         videoWidget_->resize(videoContainer_->size());
+        videoWidget_->show();
     }
-
-    videoWidget_->show();
 
     // Dump pipeline graph after 10s for debugging
     QTimer::singleShot(10000, this, SLOT(dumpDot()));
@@ -389,14 +394,27 @@ void GSTVideoOutput::onStopPlayback()
 
 void GSTVideoOutput::resize()
 {
-    if (!videoContainer_)
-        return;
+    int containerWidth, containerHeight;
+
+    if (videoContainer_)
+    {
+        containerWidth  = videoContainer_->width();
+        containerHeight = videoContainer_->height();
+        if (videoWidget_)
+            videoWidget_->resize(videoContainer_->size());
+    }
+    else
+    {
+        QScreen* screen = QApplication::primaryScreen();
+        QRect geom = screen ? screen->geometry() : QRect(0, 0, 800, 480);
+        containerWidth  = geom.width();
+        containerHeight = geom.height();
+        if (videoWidget_)
+            videoWidget_->setGeometry(geom);
+    }
 
     OPENAUTO_LOG(info) << "[GSTVideoOutput] Resize to "
-                       << videoContainer_->width() << "x" << videoContainer_->height();
-
-    if (videoWidget_)
-        videoWidget_->resize(videoContainer_->size());
+                       << containerWidth << "x" << containerHeight;
 
     int width = 800, height = 480;
     switch (this->getVideoResolution())
@@ -405,9 +423,6 @@ void GSTVideoOutput::resize()
     case aasdk::proto::enums::VideoResolution_Enum__720p:  width = 1280; height = 720;  break;
     default: break;  // 480p: 800x480
     }
-
-    int containerWidth  = videoContainer_->width();
-    int containerHeight = videoContainer_->height();
 
     double marginWidth  = 0;
     double marginHeight = 0;

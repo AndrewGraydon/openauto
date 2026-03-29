@@ -50,7 +50,8 @@ private:
     uint32_t sampleRate_;
     SequentialBuffer audioBuffer_;
     std::unique_ptr<RtAudio> dac_;
-    static std::mutex mutex_;
+    static std::mutex mutex_;   // serialises stream open/start/stop across all instances
+    std::mutex bufferMutex_;    // protects audioBuffer_ for this instance
 };
 
 }

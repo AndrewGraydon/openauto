@@ -70,6 +70,7 @@ bool RtAudioOutput::open()
 
 void RtAudioOutput::write(aasdk::messenger::Timestamp::ValueType timestamp, const aasdk::common::DataConstBuffer& buffer)
 {
+    std::lock_guard<std::mutex> lock(bufferMutex_);
     audioBuffer_.write(reinterpret_cast<const char*>(buffer.cdata), buffer.size);
 }
 
@@ -141,7 +142,7 @@ int RtAudioOutput::audioBufferReadHandler(void* outputBuffer, void* inputBuffer,
                                           double streamTime, RtAudioStreamStatus status, void* userData)
 {
     RtAudioOutput* self = static_cast<RtAudioOutput*>(userData);
-    std::lock_guard<decltype(self->mutex_)> lock(self->mutex_);
+    std::lock_guard<std::mutex> lock(self->bufferMutex_);
 
     const auto bufferSize = nBufferFrames * (self->sampleSize_ / 8) * self->channelCount_;
     self->audioBuffer_.read(reinterpret_cast<char*>(outputBuffer), bufferSize);
