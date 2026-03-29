@@ -367,10 +367,8 @@ void GSTVideoOutput::onStartPlayback()
 
     if (videoContainer_ == nullptr)
     {
-        // Hide all other top-level windows (e.g. MainWindow) so our VideoWidget
-        // is the only visible window. Under EGLFS, WindowStaysOnTopHint does not
-        // guarantee ordering between two windows that both have the hint, so we
-        // must hide the others explicitly.
+        // Hide all other top-level windows (e.g. MainWindow) before going
+        // fullscreen, so our VideoWidget becomes the sole visible window.
         hiddenWidgets_.clear();
         for (QWidget* w : QApplication::topLevelWidgets())
         {
@@ -378,6 +376,8 @@ void GSTVideoOutput::onStartPlayback()
             {
                 w->hide();
                 hiddenWidgets_.append(w);
+                OPENAUTO_LOG(info) << "[GSTVideoOutput] Hid window: "
+                                   << w->metaObject()->className();
             }
         }
 
@@ -385,9 +385,10 @@ void GSTVideoOutput::onStartPlayback()
         QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 800, 480);
         OPENAUTO_LOG(info) << "[GSTVideoOutput] Fullscreen mode: "
                            << screenGeom.width() << "x" << screenGeom.height();
-        videoWidget_->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);
-        videoWidget_->setGeometry(screenGeom);
-        videoWidget_->show();
+
+        // showFullScreen() is the most reliable way to get a correct fullscreen
+        // geometry under EGLFS now that MainWindow is hidden.
+        videoWidget_->showFullScreen();
         videoWidget_->raise();
         videoWidget_->setFocus();
     }
