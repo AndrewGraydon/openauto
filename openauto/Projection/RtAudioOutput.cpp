@@ -145,6 +145,9 @@ int RtAudioOutput::audioBufferReadHandler(void* outputBuffer, void* inputBuffer,
     std::lock_guard<std::mutex> lock(self->bufferMutex_);
 
     const auto bufferSize = nBufferFrames * (self->sampleSize_ / 8) * self->channelCount_;
+    // Zero-fill first so any unfilled bytes output silence rather than
+    // replaying stale data from the previous callback invocation.
+    memset(outputBuffer, 0, bufferSize);
     self->audioBuffer_.read(reinterpret_cast<char*>(outputBuffer), bufferSize);
     return 0;
 }
