@@ -395,6 +395,19 @@ void GSTVideoOutput::onStartPlayback()
         videoWidget_->show();
         videoWidget_->raise();
         videoWidget_->setFocus();
+
+        // Diagnostic: write actual geometry to file so we can read it via SSH
+        {
+            QRect actual = videoWidget_->geometry();
+            FILE* f = fopen("/tmp/vw_geom.txt", "w");
+            if (f) {
+                fprintf(f, "requested: %dx%d\nactual: %dx%d at (%d,%d)\nscreen: %dx%d\n",
+                        screenGeom.width(), screenGeom.height(),
+                        actual.width(), actual.height(), actual.x(), actual.y(),
+                        screenGeom.width(), screenGeom.height());
+                fclose(f);
+            }
+        }
     }
     else
     {
