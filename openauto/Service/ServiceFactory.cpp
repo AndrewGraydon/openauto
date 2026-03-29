@@ -33,6 +33,9 @@
 #include "openauto/Service/NavigationStatusService.hpp"
 #include "openauto/Projection/QtVideoOutput.hpp"
 #include "openauto/Projection/GSTVideoOutput.hpp"
+#ifdef USE_GST
+#include <gst/gst.h>
+#endif
 #include "openauto/Projection/OMXVideoOutput.hpp"
 #include "openauto/Projection/RtAudioOutput.hpp"
 #include "openauto/Projection/QtAudioOutput.hpp"
@@ -57,7 +60,7 @@ ServiceFactory::ServiceFactory(boost::asio::io_service& ioService, configuration
 #if defined USE_OMX
     , omxVideoOutput_(std::make_shared<projection::OMXVideoOutput>(configuration_, this->QRectToDestRect(screenGeometry_), activeCallback_))
 #elif defined USE_GST
-    , gstVideoOutput_((QGst::init(nullptr, nullptr), std::make_shared<projection::GSTVideoOutput>(configuration_, activeArea_, activeCallback_)))
+    , gstVideoOutput_((gst_init(nullptr, nullptr), std::make_shared<projection::GSTVideoOutput>(configuration_, activeArea_, activeCallback_)))
 #else
     , qtVideoOutput_(nullptr)
 #endif
