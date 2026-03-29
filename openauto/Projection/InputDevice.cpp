@@ -75,6 +75,13 @@ bool InputDevice::eventFilter(QObject* obj, QEvent* event)
         }
         else if(event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease || event->type() == QEvent::MouseMove)
         {
+            // When a physical touchscreen is configured, libinput (and some
+            // evdev setups) also synthesize a QMouseEvent for each touch.
+            // Skipping mouse events here prevents the double-tap that would
+            // otherwise result from processing both the QTouchEvent and the
+            // synthetic QMouseEvent for the same physical contact.
+            if(configuration_->getTouchscreenEnabled())
+                return false;
             return this->handleMouseEvent(event);
         }
     }
