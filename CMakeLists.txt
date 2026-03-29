@@ -42,7 +42,7 @@ add_definitions(-DBOOST_ALL_DYN_LINK)
 find_package(Boost REQUIRED COMPONENTS system log OPTIONAL_COMPONENTS unit_test_framework)
 
 find_package(libusb-1.0 REQUIRED)
-find_package(Qt5 COMPONENTS Multimedia MultimediaWidgets Bluetooth Qml Quick QuickWidgets REQUIRED)
+find_package(Qt5 COMPONENTS Multimedia MultimediaWidgets Bluetooth REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(rtaudio REQUIRED)
@@ -56,8 +56,8 @@ if(RPI_BUILD)
 endif()
 
 if(GST_BUILD)
-    find_package(GObject)
-    find_package(Qt5GStreamer)
+    # qt-gstreamer (QGlib/QGst) was removed from Debian 13. GSTVideoOutput now
+    # uses the plain GStreamer C API (gst-1.0) directly — no Qt5GStreamer needed.
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GST REQUIRED
                       gstreamer-1.0>=1.4

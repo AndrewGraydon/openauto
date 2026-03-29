@@ -92,15 +92,11 @@ target_sources(openauto PRIVATE
         )
 
 target_include_directories(openauto SYSTEM PUBLIC
-        ${QTGSTREAMER_INCLUDE_DIR}
         ${GST_INCLUDE_DIRS}
         )
 
 target_link_libraries(openauto PRIVATE
-        ${QTGSTREAMER_LIBRARY}
         ${GST_LIBRARIES}
-        ${Qt5QuickWidgets_LIBRARIES}
-        ${QTGSTREAMER_QUICK_LIBRARY}
         )
 endif()
 

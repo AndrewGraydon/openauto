@@ -20,31 +20,18 @@
 #pragma once
 
 #include <mutex>
-#include <condition_variable>
 #include <functional>
-#include <thread>
-#include <boost/circular_buffer.hpp>
 #include <boost/noncopyable.hpp>
 #include "openauto/Projection/VideoOutput.hpp"
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 #include <gst/app/gstappsink.h>
 #include <gst/video/video.h>
-#include <QGlib/Error>
-#include <QGlib/Connect>
-#include <QGst/Init>
-#include <QGst/Bus>
-#include <QGst/Pipeline>
-#include <QGst/Parse>
-#include <QGst/Message>
-#include <QGst/Utils/ApplicationSink>
-#include <QGst/Utils/ApplicationSource>
-#include <QGst/Ui/VideoWidget>
-#include <QGst/ElementFactory>
-#include <QGst/Quick/VideoSurface>
-#include <QtQml/QQmlContext>
-#include <QtQuickWidgets/QQuickWidget>
 #include <QApplication>
+#include <QWidget>
+#include <QImage>
+#include <QPainter>
+#include <QTimer>
 
 namespace openauto
 {
@@ -52,7 +39,7 @@ namespace projection
 {
 
 // enum of possible h264 decoders dash will attempt to use
-enum H264_Decoder { 
+enum H264_Decoder {
     nvcodec,
     v4l2,
     omx,
@@ -82,14 +69,30 @@ inline const char* ToPipeline(H264_Decoder v)
 {
     switch (v)
     {
-        // we're going to assume that any machine with an nvidia card has a cpu powerful enough for video convert.
         case nvcodec: return "nvh264dec ! videoconvert";
-        case v4l2: return "v4l2h264dec";
+        case v4l2: return "v4l2h264dec ! videoconvert";
         case omx: return "omxh264dec";
-        case libav: return "avdec_h264";
-        default: return "unknown";
+        case libav: return "avdec_h264 ! videoconvert";
+        default: return "avdec_h264 ! videoconvert";
     }
 }
+
+// QWidget that renders GStreamer frames via QPainter
+class VideoWidget : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit VideoWidget(QWidget* parent = nullptr);
+    void updateFrame(const QImage& frame);
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
+private:
+    QImage currentFrame_;
+    std::mutex frameMutex_;
+};
 
 class GSTVideoOutput: public QObject, public VideoOutput, boost::noncopyable
 {
@@ -107,6 +110,7 @@ public:
 signals:
     void startPlayback();
     void stopPlayback();
+    void newFrame(const QImage& frame);
 
 protected slots:
     void onStartPlayback();
@@ -117,17 +121,16 @@ public slots:
 private:
     static GstPadProbeReturn convertProbe(GstPad* pad, GstPadProbeInfo* info, void*);
     static gboolean busCallback(GstBus*, GstMessage* message, gpointer*);
+    static GstFlowReturn onNewSample(GstAppSink* sink, gpointer userData);
     H264_Decoder findPreferredVideoDecoder();
 
     bool firstHeaderParsed = false;
 
-    QGst::ElementPtr videoSink_;
-    QQuickWidget* videoWidget_;
+    VideoWidget* videoWidget_;
     GstElement* vidPipeline_;
     GstVideoFilter* vidCrop_;
     GstAppSrc* vidSrc_;
     QWidget* videoContainer_;
-    QGst::Quick::VideoSurface* surface_;
     std::function<void(bool)> activeCallback_;
 };
 
