@@ -367,8 +367,9 @@ void GSTVideoOutput::onStartPlayback()
 
     if (videoContainer_ == nullptr)
     {
-        // Hide all other top-level windows (e.g. MainWindow) before going
-        // fullscreen, so our VideoWidget becomes the sole visible window.
+        // Hide all other top-level windows (e.g. MainWindow) so our VideoWidget
+        // is not obscured. Do this BEFORE show() so EGLFS can assign the
+        // correct fullscreen geometry to our widget.
         hiddenWidgets_.clear();
         for (QWidget* w : QApplication::topLevelWidgets())
         {
@@ -386,9 +387,12 @@ void GSTVideoOutput::onStartPlayback()
         OPENAUTO_LOG(info) << "[GSTVideoOutput] Fullscreen mode: "
                            << screenGeom.width() << "x" << screenGeom.height();
 
-        // showFullScreen() is the most reliable way to get a correct fullscreen
-        // geometry under EGLFS now that MainWindow is hidden.
-        videoWidget_->showFullScreen();
+        // Use setGeometry + show + raise (not showFullScreen) so EGLFS assigns
+        // the explicit 1024x600 geometry. WindowStaysOnTopHint is required for
+        // EGLFS to correctly size the second top-level window.
+        videoWidget_->setWindowFlags(Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);
+        videoWidget_->setGeometry(screenGeom);
+        videoWidget_->show();
         videoWidget_->raise();
         videoWidget_->setFocus();
     }
