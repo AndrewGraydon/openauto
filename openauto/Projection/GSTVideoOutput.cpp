@@ -166,7 +166,7 @@ void GSTVideoOutput::dumpDot()
     OPENAUTO_LOG(info) << "[GSTVideoOutput] Dumped pipeline dot graph";
 }
 
-gboolean GSTVideoOutput::busCallback(GstBus*, GstMessage* message, gpointer* userData)
+gboolean GSTVideoOutput::busCallback(GstBus*, GstMessage* message, gpointer userData)
 {
     auto* self = static_cast<GSTVideoOutput*>(userData);
     gchar* debug = nullptr;
